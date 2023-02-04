@@ -1,6 +1,4 @@
 # Prediction-UPDRS-Parkinson-scores
-Prediction of UPDRS scores in Parkinson’s patients from voice recordings.
-
 To reproduce the results obtained and commented on in the report, just follow these simple instructions:
 
 1. Open the R document and change if necessary the path to the working directory of your R studio. Run the entire R document for pre-processing, regression techniques, and glm. 
