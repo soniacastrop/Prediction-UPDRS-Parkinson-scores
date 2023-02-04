@@ -1,0 +1,555 @@
+---
+title: "AA1_2"
+output: html_document
+---
+```{r}
+library(cclust)
+library(Rmixmod)
+library(Matrix)
+library(glmnet)
+library(factoextra)
+source("C-H.r")
+library("rgl")
+```
+
+1)Tractament de valors perduts, outliers i valors incoherents.
+
+
+Llegim les dades i transfomem en categòriques les pertocants.
+```{r}
+set.seed(3)
+data<-read.table("C:/Users/sonia/Documents/parkinsons_updrs.data", header=TRUE, sep=",", dec=".", na.strings = "N/A")
+data$sex<-as.factor(data$sex)
+data$subject<-as.factor(data$subject)
+data
+```
+
+```{r}
+summary(data)
+```
+```{r}
+dem <- data[data$test_time <0,]
+dem
+```
+Veiem que els valors de test_ time són negatius només en dos pacients en dos dies concrets.
+
+```{r}
+dem2 <- data[data$subject==34 & data$test_time <4 & data$test_time >3,]
+dem2
+```
+Veiem com aquest pacient ja té dades pel tercer dia, per tant concluim que seriem mesures d'un altre pacient, com que no podem saber de qui eliminarem aquestes files.
+
+```{r}
+data <- data[-c(4533,4559,4586,4613,4640,4667),]
+```
+
+```{r}
+dim(data)
+```
+
+```{r}
+dem3 <- data[data$subject==42 & data$test_time <5 & data$test_time >4,]
+dem3
+```
+
+Veiem que pel pacient 42 no hi ha mesures el dia 4, per tant concluim que l'error va ser al introduir les dades. 
+
+Traiem els valors negatius de test_time, després de comprovar que era degut a un error al introduir les dades.
+```{r}
+for (i in 1:5869){
+  if (data[i,]$test_time<0){
+    data[i,]$test_time = -1 * data[i,]$test_time
+  }
+}
+```
+
+
+Mirem les correlacions de les variables per si poden eliminar alguna variable.
+##Correlacion
+```{r}
+plot(data[,7:11])
+```
+
+RAP i DDP són la mateixa variable, corr=1.
+
+
+```{r}
+plot(data[,12:17])
+```
+
+APQ3  i DDA són la mateixa variable, corr=1
+
+Eliminimen dda i ddp.
+
+
+Mirem si les variables són gaussianes.
+```{r}
+#agafem només les variables numèriques
+{plot(density(data[,2]), xlab="", main=names(data)[2])}
+for(i in 4:22)
+  {plot(density(data[,i]), xlab="", main=names(data)[i])}
+```
+
+
+Normalitzem les variables que veiem que no ho són.
+
+```{r}
+library(MASS)
+par(mfrow=c(3,3))
+
+hist(data$age, main="Look at that ...")
+bx = boxcox(I(data$age+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$age = (data$age^lambda - 1)/lambda
+hist(data$age, main="Look at that now!")
+
+
+hist(data$test_time, main="Look at that ...")
+bx = boxcox(I(data$test_time+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$test_time = (data$test_time^lambda - 1)/lambda
+hist(data$test_time, main="Look at that now!")
+
+
+hist(data$motor_UPDRS, main="Look at that ...")
+bx = boxcox(I(data$motor_UPDRS+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$motor_UPDRS = (data$motor_UPDRS^lambda - 1)/lambda
+hist(data$motor_UPDRS, main="Look at that now!")
+
+hist(data$Jitter..., main="Look at that ...")
+bx = boxcox(I(data$Jitter...+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Jitter... = (data$Jitter...^lambda - 1)/lambda
+hist(data$Jitter..., main="Look at that now!")
+
+
+
+hist(data$Jitter.Abs, main="Look at that ...")
+bx = boxcox(I(data$Jitter.Abs+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Jitter.Abs = (data$Jitter.Abs^lambda - 1)/lambda
+hist(data$Jitter.Abs, main="Look at that now!")
+
+
+hist(data$Jitter.RAP, main="Look at that ...")
+bx = boxcox(I(data$Jitter.RAP+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Jitter.RAP = (data$Jitter.RAP^lambda - 1)/lambda
+hist(data$Jitter.RAP, main="Look at that now!")
+
+
+hist(data$Jitter.PPQ5, main="Look at that ...")
+bx = boxcox(I(data$Jitter.PPQ5+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Jitter.PPQ5 = (data$Jitter.PPQ5^lambda - 1)/lambda
+hist(data$Jitter.PPQ5, main="Look at that now!")
+
+
+
+hist(data$Jitter.DDP, main="Look at that ...")
+bx = boxcox(I(data$Jitter.DDP+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Jitter.DDP = (data$Jitter.DDP^lambda - 1)/lambda
+hist(data$Jitter.DDP, main="Look at that now!")
+
+
+
+hist(data$Shimmer, main="Look at that ...")
+bx = boxcox(I(data$Shimmer+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Shimmer = (data$Shimmer^lambda - 1)/lambda
+hist(data$Shimmer, main="Look at that now!")
+
+```
+
+
+```{r}
+
+par(mfrow=c(3,3))
+hist(data$Shimmer.dB, main="Look at that ...")
+bx = boxcox(I(data$Shimmer.dB+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Shimmer.dB = (data$Shimmer.dB^lambda - 1)/lambda
+hist(data$Shimmer.dB, main="Look at that now!")
+
+
+hist(data$Shimmer.APQ3, main="Look at that ...")
+bx = boxcox(I(data$Shimmer.APQ3+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Shimmer.APQ3 = (data$Shimmer.APQ3^lambda - 1)/lambda
+hist(data$Shimmer.APQ3, main="Look at that now!")
+
+
+
+hist(data$Shimmer.APQ5, main="Look at that ...")
+bx = boxcox(I(data$Shimmer.APQ5+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Shimmer.APQ5 = (data$Shimmer.APQ5^lambda - 1)/lambda
+hist(data$Shimmer.APQ5, main="Look at that now!")
+
+
+hist(data$Shimmer.APQ11, main="Look at that ...")
+bx = boxcox(I(data$Shimmer.APQ11+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Shimmer.APQ11 = (data$Shimmer.APQ11^lambda - 1)/lambda
+hist(data$Shimmer.APQ11, main="Look at that now!")
+
+
+hist(data$Shimmer.DDA, main="Look at that ...")
+bx = boxcox(I(data$Shimmer.DDA+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$Shimmer.DDA = (data$Shimmer.DDA^lambda - 1)/lambda
+hist(data$Shimmer.DDA, main="Look at that now!")
+
+
+hist(data$NHR, main="Look at that ...")
+bx = boxcox(I(data$NHR+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$NHR = (data$NHR^lambda - 1)/lambda
+hist(data$NHR, main="Look at that now!")
+
+
+hist(data$RPDE, main="Look at that ...")
+bx = boxcox(I(data$RPDE+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$RPDE = (data$RPDE^lambda - 1)/lambda
+hist(data$RPDE, main="Look at that now!")
+
+
+hist(data$DFA, main="Look at that ...")
+bx = boxcox(I(data$DFA+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$DFA = (data$DFA^lambda - 1)/lambda
+hist(data$DFA, main="Look at that now!")
+
+
+hist(data$PPE, main="Look at that ...")
+bx = boxcox(I(data$PPE+1) ~ . - total_UPDRS, data = data,
+             lambda = seq(-0.25, 0.25, length = 10))
+lambda = bx$x[which.max(bx$y)]
+data$PPE = (data$PPE^lambda - 1)/lambda
+hist(data$PPE, main="Look at that now!")
+```
+
+
+Traiem les variables redundants.
+
+```{r}
+data <- data[,c(1:10,12:16,18:22)]
+```
+
+Barrejem les dades i les guardem.
+
+```{r}
+set.seed (104)
+data.new = data[sample.int(nrow(data)),]
+```
+
+```{r}
+save(data.new, file = "aa1.Rdata")
+```
+
+
+
+##Linear Regression
+
+Dividim les dades en training i test.
+```{r}
+train <- data.new[1:4000,]
+test <- data.new[4001:5869,]
+```
+
+```{r}
+dim(train)
+```
+Justificar no hacerlo por sujeto
+
+1. Standard linear regression
+```{r}
+model.linreg<-lm(total_UPDRS ~.,data=train[,c(2:20)])
+summary(model.linreg)
+```
+
+```{r}
+model.linreg.FINAL<-step(model.linreg)
+```
+```{r}
+summary(model.linreg.FINAL)
+```
+
+
+2. Ridge linear regression
+```{r}
+model.ridge <- lm.ridge(total_UPDRS ~.,data=train[,c(2:20)], lambda=seq(0,10,0.1))
+plot(seq(0,10,0.1),model.ridge$GCV,main="GCV of Ridge Regression", xlab=expression(lambda), ylab="GCV")
+```
+```{r}
+lambda.ridge <- seq(0,10,0.1)[which.min(model.ridge$GCV)]
+lambda.ridge
+```
+
+```{r}
+model.ridge <- lm.ridge(total_UPDRS ~.,data=train[,c(2:20)], lambda=10)
+model.ridge
+```
+
+
+
+3. LASSO linear regression
+
+```{r}
+t<-as.numeric(train[,'total_UPDRS'])
+x<-as.matrix(train[,c(2,4,5,7:20)])
+model.lasso <- cv.glmnet(x,t,nfolds=10)
+plot(model.lasso)
+
+```
+```{r}
+lambda.lasso <- model.lasso$lambda.min
+lambda.lasso
+```
+
+
+
+
+400X10CV per escollir model de regressió lineal. Tornem a posar sex com a numèrica amb valors 0 y 1 per tal que es puguin calcular les prediccions al mlultiplicar pels coeficients del model.
+
+```{r}
+train$sex <- as.numeric(train$sex)-1
+data <- train[,c(2:20)] 
+
+K <- 400; TIMES <- 10   # 10x10-cv
+
+dim(data)
+```
+
+
+
+```{r}
+res <- replicate (TIMES, {
+  # shuffle the data
+  data <- data[sample(nrow(data)),]
+  # Create K equally sized folds
+  folds <- cut (1:nrow(data), breaks=K, labels=FALSE)
+  sse.standard <- sse.ridge <- sse.lasso <- 0
+
+  # Perform 10 fold cross validation
+  for (i in 1:K)
+  {
+    valid.indexes <- which (folds==i, arr.ind=TRUE)
+    valid.data <- data[valid.indexes, ]
+    train.data <- data[-valid.indexes, ]
+
+      #standard
+    model.standard <- lm (total_UPDRS ~ ., data=train.data)
+    beta.standard <- coef(model.standard)
+    preds.standard <- beta.standard[1] + as.matrix(valid.data[,c(1:4,6:19)]) %*% beta.standard[2:19]
+    sse.standard <- sse.standard + crossprod(valid.data[,'total_UPDRS'] - preds.standard)
+
+    #ridge
+    model.ridgereg <- lm.ridge (total_UPDRS ~ ., data=train.data, lambda = lambda.ridge)
+    beta.ridgereg <- coef (model.ridgereg)
+    preds.ridgereg <- beta.ridgereg[1] + as.matrix(valid.data[,c(1:4,6:19)]) %*% beta.ridgereg[2:19]
+    sse.ridge <- sse.ridge + crossprod(valid.data[,'total_UPDRS'] - preds.ridgereg)
+
+    #lasso
+    model.lasso <- glmnet(as.matrix(train.data[,c(1,3:4,6:18)]), as.numeric(train.data[,'total_UPDRS']), lambda=lambda.lasso)
+    preds.lasso <- predict(model.lasso, newx = as.matrix(valid.data[,c(1,3:4,6:18)]))
+    sse.lasso <- sse.lasso + crossprod(valid.data[,'total_UPDRS'] - preds.lasso)
+  }
+  c(sse.standard, sse.ridge, sse.lasso)
+})
+
+normalization <- (nrow(train)-1)*var(train$total_UPDRS) # denominator of NRMSE
+nmse.crossval <- rowMeans(res) / normalization
+
+paste("cross-validation mean error for standard linear regression is", nmse.crossval[1])
+paste("cross-validation mean error for ridge linear regression is", nmse.crossval[2], "with lambda =", lambda.ridge)
+paste("cross-validation mean error for lasso linear regression is", nmse.crossval[3], "with lambda =", lambda.lasso)
+```
+
+El model escollit és el ridge.
+
+```{r}
+model.ridge.FINAL <- lm.ridge(total_UPDRS ~.,data=train[,c(2:20)], lambda = lambda.ridge)
+(beta.ridge.FINAL <- coef(model.ridge.FINAL))
+```
+
+
+Calculem l'error en el test.
+```{r}
+## This is the test NMSE:
+test$sex <- as.numeric(test$sex)-1
+normalization.test <- (length(test$total_UPDRS)-1)*var(test$total_UPDRS)
+```
+
+
+```{r}
+sse <- crossprod (test$total_UPDRS - beta.ridge.FINAL[1]
+           - as.matrix(test[,c(2:5,7:20)]) %*% beta.ridge.FINAL[2:19])
+
+(NMSE.ridge <- sse/normalization.test)
+```
+4. LOGISTIC REGRESSION
+```{r}
+boxplot(data.new$total_UPDRS, col="lightgray")
+title ("total_UPDRS values")
+```
+
+```{r}
+summary(data.new$total_UPDRS)
+```
+
+Dividim la variable resposta en dos grups (0-30), (30-60)
+```{r}
+(total_UPDRS.cat = cut(data.new$total_UPDRS, breaks = seq(0, 60, 30)))
+```
+
+```{r}
+(total_UPDRS.tab = table(total_UPDRS.cat))
+```
+
+```{r}
+barplot(total_UPDRS.tab)    # bar chart
+pie(total_UPDRS.tab)        # pie chart
+```
+
+
+```{r}
+total_UPDRS2.cat = factor(as.integer(data.new$total_UPDRS <= 30))
+```
+
+```{r}
+levels(total_UPDRS2.cat) = c('1','0')
+```
+
+```{r}
+data.new$total_UPDRS <- total_UPDRS2.cat
+```
+
+```{r}
+data.new
+```
+
+Les barrejem.
+
+```{r}
+set.seed(24)
+```
+
+```{r}
+data.new2 <- data.new[sample(nrow(data.new)),]
+```
+
+Guardem les dades per poderles utilitzar al notebook també.
+
+```{r}
+write.csv (data.new, 'preprocessed.csv')
+```
+
+```{r}
+train.new <- data.new2[1:2000,]
+val.new <- data.new2[2001:4000,]
+test.new <- data.new2[4001:5869,]
+dim(test.new)
+```
+
+
+```{r}
+write.csv (train.new, 'train.csv')
+write.csv (val.new, 'val.csv')
+write.csv (test.new, 'test.csv')
+```
+
+
+
+GENERALIZED LINEAR MODEL
+
+```{r}
+train.new <- data.new2[1:4000,]
+test.new <- data.new2[4001:5869,]
+```
+
+
+
+```{r}
+glm <- glm (total_UPDRS~., data = train.new[,c(2:20)], family= binomial)
+```
+
+```{r}
+summary(glm)
+```
+
+```{r}
+glm.AIC = step(glm)
+```
+Model glm amb el millor AIC:
+```{r}
+summary(glm.AIC)
+```
+```{r}
+levels(train.new$total_UPDRS)
+```
+Cambiem els noms per entendre'ns millor.
+
+```{r}
+levels(train.new$total_UPDRS)=c("late_parkinson", "early_parkinson")
+levels(test.new$total_UPDRS)=c("late_parkinson", "early_parkinson")
+
+```
+
+
+```{r}
+glm.accs <- function (P=0.7)
+{
+  ## Compute accuracy in learning data
+  
+  glm.AICpred <- NULL
+  glm.AICpred[glm.AIC$fitted.values<P] <- 0
+  glm.AICpred[glm.AIC$fitted.values>=P] <- 1
+  
+  glm.AICpred <- factor(glm.AICpred, labels=c("late_parkinson","early_parkinson"))
+  
+  print(M1.TRtable <- table(Truth=train.new$total_UPDRS,Pred=glm.AICpred))
+  
+  print(100*(1-sum(diag(M1.TRtable))/4000))
+   
+  ## Compute accuracy in test data
+  
+  gl1t <- predict(glm.AIC, newdata = test.new[,c(2:20)],type="response")
+  gl1predt <- NULL
+  gl1predt[gl1t<P] <- 0
+  gl1predt[gl1t>=P] <- 1
+  
+  gl1predt <- factor(gl1predt, labels=c("late_parkinson","early_parkinson"))
+  
+  print(M1.TEtable <- table(Truth=test.new$total_UPDRS,Pred=gl1predt))
+  
+  print(100*(1-sum(diag(M1.TEtable))/1869))
+}
+```
+
+```{r}
+glm.accs()
+```
+
+
+
