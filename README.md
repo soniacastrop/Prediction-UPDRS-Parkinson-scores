@@ -3,7 +3,7 @@ To reproduce the results obtained and commented on in the report, just follow th
 
 1. Open the R document and change if necessary the path to the working directory of your R studio. Run the entire R document for pre-processing, regression techniques, and glm. 
 
-2.Subsequently (without doing the pre-processing and saving the new data file we cannot execute the .ipynb) we execute the entire pyhton notebook from anaconda. (check you're working directory too).
+2. Subsequently (without doing the pre-processing and saving the new data file we cannot execute the .ipynb) we execute the entire pyhton notebook from anaconda. (check you're working directory too).
 
 
 Note1: The result should be the same given the use of a seed.
